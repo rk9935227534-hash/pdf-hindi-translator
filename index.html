@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PDF Hindi Translator</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f3f6fb;color:#17243a;font-family:Arial,"Noto Sans Devanagari",sans-serif}
+    .wrap{max-width:760px;margin:42px auto;padding:16px}.panel{background:white;border-radius:20px;padding:28px;box-shadow:0 10px 35px #17345b12}
+    header{background:#142d50;color:white;padding:26px;border-radius:16px;margin:-4px -4px 24px}
+    h1{margin:0 0 8px;font-size:28px}p{line-height:1.6;color:#53647a}.drop{border:2px dashed #91a9c7;border-radius:14px;padding:28px;text-align:center;margin:20px 0}
+    input{max-width:100%;margin:12px}button,.download{border:0;background:#1768c5;color:white;padding:14px 20px;border-radius:10px;font-size:16px;cursor:pointer;text-decoration:none;display:inline-block}
+    button:disabled{opacity:.55;cursor:wait}.info{background:#eef5ff;padding:14px;border-radius:10px;font-size:14px;color:#34506e}
+    #status{margin-top:20px;font-weight:600}progress{width:100%;height:16px;margin-top:12px}small{color:#66758a}.hidden{display:none}
+  </style>
+</head>
+<body>
+<div class="wrap"><main class="panel">
+  <header><h1>PDF Hindi Translator</h1><div>English PDF को हिंदी में बदलें</div></header>
+  <p>अपनी PDF अपलोड करें। अनुवाद के बाद नई हिंदी PDF डाउनलोड कर सकेंगे।</p>
+  <div class="drop">
+    <strong>अपनी PDF चुनें</strong><br>
+    <input id="file" type="file" accept="application/pdf">
+    <div><small>अधिकतम 150 पेज • डिफॉल्ट फाइल सीमा 30 MB</small></div>
+  </div>
+  <div class="info">फोटो और पेज के मूल लेआउट को यथासंभव रखा जाएगा। हिंदी टेक्स्ट की लंबाई अलग होने के कारण कुछ पेजों में बदलाव हो सकता है।</div>
+  <p><button id="go">Translate PDF to Hindi</button></p>
+  <div id="status" role="status"></div>
+  <progress id="progress" class="hidden" value="0" max="100"></progress>
+  <p><a id="download" class="download hidden" href="#">हिंदी PDF डाउनलोड करें</a></p>
+  <p><small>नोट: यह शुरुआती संस्करण text-based PDFs के लिए है। स्कैन की गई PDF के लिए OCR जोड़ना होगा।</small></p>
+</main></div>
+<script>
+const fileInput=document.getElementById('file'), go=document.getElementById('go');
+const statusBox=document.getElementById('status'), progress=document.getElementById('progress');
+const download=document.getElementById('download');
+go.addEventListener('click',async()=>{
+  const file=fileInput.files[0];
+  if(!file){statusBox.textContent='पहले PDF फाइल चुनें।';return;}
+  go.disabled=true;download.classList.add('hidden');progress.classList.remove('hidden');
+  statusBox.textContent='PDF अपलोड हो रही है...';
+  try{
+    const data=new FormData();data.append('file',file);
+    const response=await fetch('/api/translate',{method:'POST',body:data});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.detail||'Upload failed');
+    statusBox.textContent='अनुवाद शुरू हो गया है...';
+    const timer=setInterval(async()=>{
+      try{
+        const r=await fetch('/api/status/'+result.job_id), s=await r.json();
+        const pct=s.total_pages?Math.round(s.completed_pages/s.total_pages*100):0;
+        progress.value=pct;statusBox.textContent=s.message+' ('+pct+'%)';
+        if(s.status==='completed'){
+          clearInterval(timer);go.disabled=false;
+          download.href='/api/download/'+result.job_id;download.classList.remove('hidden');
+          if(s.overflow_blocks)statusBox.textContent+=' कुछ टेक्स्ट बॉक्स में फिट नहीं हुआ; कृपया PDF जांचें।';
+        }else if(s.status==='failed'){
+          clearInterval(timer);go.disabled=false;statusBox.textContent='त्रुटि: '+s.message;
+        }
+      }catch(e){clearInterval(timer);go.disabled=false;statusBox.textContent='स्थिति प्राप्त नहीं हुई: '+e.message;}
+    },2500);
+  }catch(e){go.disabled=false;statusBox.textContent='त्रुटि: '+e.message;}
+});
+</script>
+</body></html>
